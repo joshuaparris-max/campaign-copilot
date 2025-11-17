@@ -1,5 +1,6 @@
 // Backend server for Campaign Copilot
-// Handles AI API calls with OpenAI integration
+// Loads environment and handles AI API calls (OpenAI/Groq compatible)
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { aiRouter } from './routes/aiRouter';
@@ -25,6 +26,7 @@ app.use('/api', aiRouter);
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Campaign Copilot API server running on http://localhost:${PORT}`);
+  console.log(`📡 Groq API: ${process.env.GROQ_API_KEY ? '✅ Configured' : '⚠️  Not configured'}`);
   console.log(`📡 OpenAI API: ${process.env.OPENAI_API_KEY ? '✅ Configured' : '⚠️  Not configured (using rule-based fallback)'}`);
 });
 

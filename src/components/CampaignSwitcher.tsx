@@ -200,14 +200,14 @@ export function CampaignSwitcher() {
       if (importData) {
         if (importMode === 'merge') {
           const merged = resolveMerge(imported);
-          importData(merged as CampaignData);
+          importData(merged as CampaignData, 'merge');
           showSuccess('Import merged successfully');
           setImportPreview(null);
           setPreviewFilename(null);
           return;
         }
         // overwrite
-        importData(imported);
+        importData(imported, 'overwrite');
         showSuccess('Import applied');
         setImportPreview(null);
         setPreviewFilename(null);
@@ -356,6 +356,38 @@ export function CampaignSwitcher() {
                 )}
               </div>
             )}
+
+            {/* Quick counts: existing vs imported */}
+            <div className="mt-3 p-3 bg-gray-800 border border-gray-700 rounded text-sm">
+              <div className="font-medium mb-1">Import summary</div>
+              <div className="grid grid-cols-2 gap-2 text-sm text-gray-300">
+                <div>
+                  <div>Existing:</div>
+                  <ul className="list-disc list-inside">
+                    <li>Campaigns: <strong>{campaigns.length}</strong></li>
+                    <li>Quests: <strong>{quests.length}</strong></li>
+                    <li>NPCs: <strong>{npcs.length}</strong></li>
+                    <li>Hubs: <strong>{hubs.length}</strong></li>
+                    <li>Leads: <strong>{leads.length}</strong></li>
+                  </ul>
+                </div>
+                <div>
+                  <div>Imported:</div>
+                  <ul className="list-disc list-inside">
+                    <li>Campaign: <strong>{importPreview.campaign ? 1 : 0}</strong></li>
+                    <li>Quests: <strong>{importPreview.quests?.length ?? 0}</strong></li>
+                    <li>NPCs: <strong>{importPreview.npcs?.length ?? 0}</strong></li>
+                    <li>Hubs: <strong>{importPreview.hubs?.length ?? 0}</strong></li>
+                    <li>Leads: <strong>{importPreview.leads?.length ?? 0}</strong></li>
+                  </ul>
+                </div>
+              </div>
+              {importMode === 'merge' && conflictSummary && (
+                <div className="mt-2 text-sm text-gray-300">
+                  <div>On merge: <strong>{(importPreview.quests?.length ?? 0) + (importPreview.npcs?.length ?? 0) + (importPreview.hubs?.length ?? 0) + (importPreview.leads?.length ?? 0)} items</strong> will be added. {conflictSummary.details.length > 0 ? <span className="text-yellow-300">{conflictSummary.details.length} collisions will be renamed.</span> : null}</div>
+                </div>
+              )}
+            </div>
 
             <div className="mt-6 flex justify-end gap-2">
               <button onClick={cancelImportPreview} className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded">Cancel</button>

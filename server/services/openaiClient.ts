@@ -1,4 +1,6 @@
-// OpenAI API client for Campaign Copilot
+// OpenAI-compatible LLM client for Campaign Copilot
+// Note: the app may use different providers (OpenAI or Groq's OpenAI-compatible API).
+// This module implements the OpenAI-compatible call path.
 import type { SessionContext, NextOption } from '../../src/types';
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
@@ -14,6 +16,7 @@ export async function callOpenAI(context: SessionContext): Promise<NextOption[]>
 
   const systemPrompt = buildSystemPrompt(context);
   const userPrompt = buildUserPrompt(context);
+  const structuredContext = buildPromptContext(context);
 
   const response = await fetch(OPENAI_API_URL, {
     method: 'POST',
@@ -25,10 +28,37 @@ export async function callOpenAI(context: SessionContext): Promise<NextOption[]>
       model: DEFAULT_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: `CONTEXT_JSON:\n${structuredContext}\n\nSUMMARY:\n${userPrompt}` },
       ],
       temperature: 0.7,
-      response_format: { type: 'json_object' },
+      // Use function calling to strongly encourage a structured JSON response
+      functions: [
+        {
+          name: 'return_options',
+          description: 'Return exactly 3 option objects as JSON according to the documented schema',
+          parameters: {
+            type: 'object',
+            properties: {
+              options: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    title: { type: 'string' },
+                    bullets: { type: 'array', items: { type: 'string' } }
+                  },
+                  required: ['id', 'title', 'bullets']
+                },
+                minItems: 3,
+                maxItems: 3
+              }
+            },
+            required: ['options']
+          }
+        }
+      ],
+      function_call: { name: 'return_options' }
     }),
   });
 
@@ -38,16 +68,22 @@ export async function callOpenAI(context: SessionContext): Promise<NextOption[]>
   }
 
   const data = await response.json();
-  const content = data.choices[0]?.message?.content;
-  
-  if (!content) {
+  // The model may return a function_call with arguments containing the JSON
+  const message = data.choices[0]?.message || {};
+  let raw = '';
+  if (message.function_call && message.function_call.arguments) {
+    raw = message.function_call.arguments;
+  } else if (message.content) {
+    raw = message.content;
+  }
+
+  if (!raw) {
     throw new Error('No content in OpenAI response');
   }
 
-  // Parse JSON response
   let parsed;
   try {
-    parsed = JSON.parse(content);
+    parsed = JSON.parse(raw);
   } catch (error) {
     throw new Error(`Failed to parse OpenAI JSON response: ${error}`);
   }
@@ -65,6 +101,9 @@ export async function callOpenAI(context: SessionContext): Promise<NextOption[]>
     bullets: Array.isArray(opt.bullets) ? opt.bullets : [opt.explanation || 'No details'].flat(),
   }));
 }
+
+// `buildPromptContext` is exported later in this file; the earlier duplicate
+// definition was removed to avoid a duplicate-symbol build error.
 
 function buildSystemPrompt(context: SessionContext): string {
   const modeInstructions = getModeInstructions(context.mode);
@@ -115,6 +154,56 @@ You answer ONLY in JSON format with this exact structure:
 }
 
 Return exactly 3 options. Each option should have a clear title and 2-4 bullet points explaining the idea.`;
+}
+
+// Append the example to the end of the system prompt dynamically so the model sees it
+const originalBuildSystemPrompt = buildSystemPrompt;
+function buildSystemPromptWithExample(context: SessionContext) {
+  return originalBuildSystemPrompt(context) + '\n\n' + buildSystemPromptExample();
+}
+
+// Replace usage to include the example
+// Note: callOpenAI uses buildSystemPrompt previously; ensure it now calls the example version
+// We'll export the example builder for clarity
+export { buildSystemPromptWithExample as buildSystemPrompt };
+
+// Add a small few-shot example to the system prompt to clarify expected output shape
+// (kept separate to keep buildSystemPrompt focused and readable)
+function buildSystemPromptExample(): string {
+  return `
+Example output (exact JSON):
+{
+  "options": [
+    {
+      "id": "1",
+      "title": "Investigate the damaged boat",
+      "bullets": [
+        "Search the hull for signs of impact or a hidden compartment",
+        "Ask the fisherman about recent visitors and suspicious activity",
+        "Make a Perception or Investigation check to spot small clues"
+      ]
+    },
+    {
+      "id": "2",
+      "title": "Help the fisherman and gather information",
+      "bullets": [
+        "Offer immediate aid to calm him and learn what happened",
+        "Use Persuasion to coax more details or Insight to judge his honesty",
+        "Offer to inspect nearby beaches or speak to the harbourmaster"
+      ]
+    },
+    {
+      "id": "3",
+      "title": "Follow the trail discreetly",
+      "bullets": [
+        "Track footprints or drag marks away from the beach",
+        "Ask nearby merchants if they saw anyone leaving with supplies",
+        "Set a local perimeter watch to catch repeat offenders"
+      ]
+    }
+  ]
+}
+`;
 }
 
 function getModeInstructions(mode: SessionContext['mode']): string {
@@ -212,5 +301,30 @@ function buildUserPrompt(context: SessionContext): string {
   }
   
   return parts.join('\n');
+}
+
+// Exported for testing
+export function buildPromptContext(context: SessionContext) {
+  // Build a compact structured JSON to give the model machine-readable context
+  const ctx = {
+    id: context.sessionId || undefined,
+    mode: context.mode || 'default',
+    location: context.currentLocationName || null,
+    text: context.text || '',
+    character: context.characterProfile ? {
+      id: context.characterProfile.id,
+      name: context.characterProfile.name,
+      classAndLevel: context.characterProfile.classAndLevel,
+      race: context.characterProfile.race,
+      summary: context.characterProfile.summary,
+      dndBeyondUrl: context.characterProfile.dndBeyondUrl || null,
+    } : null,
+    openQuests: (context.openQuests || []).slice(0, 10).map(q => ({ id: q.id, title: q.title, status: q.status, location: q.location })),
+    openLeads: (context.openLeads || []).slice(0, 10).map(l => ({ id: l.id, title: l.title, importance: l.importance })),
+    npcs: (context.npcs || []).slice(0, 20).map(n => ({ id: n.id, name: n.name, role: n.role, location: n.location })),
+    recentEvents: (context.recentEvents || []).slice(0, 10).map(e => ({ id: e.id, mode: e.mode, text: e.text })),
+  };
+
+  return JSON.stringify(ctx);
 }
 

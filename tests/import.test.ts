@@ -9,6 +9,16 @@ import { loadCampaigns, loadQuests, loadNPCs, loadCharacterProfile, saveCampaign
 const fixturePath = path.resolve(__dirname, './fixtures/default-campaign-1763351446982.json');
 
 beforeEach(() => {
+  // Ensure a localStorage exists (jsdom may not be available in some environments)
+  if (typeof globalThis.localStorage === 'undefined' || globalThis.localStorage === null) {
+    const store: Record<string, string> = {};
+    globalThis.localStorage = {
+      getItem: (k: string) => (k in store ? store[k] : null),
+      setItem: (k: string, v: string) => { store[k] = String(v); },
+      removeItem: (k: string) => { delete store[k]; },
+      clear: () => { Object.keys(store).forEach(k => delete store[k]); },
+    } as any;
+  }
   // Clear localStorage in jsdom between tests
   localStorage.clear();
 });

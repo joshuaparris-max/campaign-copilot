@@ -1,4 +1,11 @@
-# Logs
+.env
+node_modules/
+dist/
+/.vite
+.DS_Store
+/.idea
+/.vscode
+coverage/# Logs
 logs
 *.log
 npm-debug.log*

@@ -66,6 +66,19 @@ src/
 └── main.tsx                   # Entry point
 ```
 
+## LLM Setup (Groq)
+
+- The backend can call Groq's OpenAI-compatible chat API. Store your secrets in a `.env` file at the project root:
+
+```bash
+GROQ_API_KEY=YOUR_REAL_KEY_HERE
+GROQ_MODEL=llama3-70b-8192
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+```
+
+- The server entry (`server/index.ts`) loads environment variables via `dotenv`. The server will prefer Groq when `GROQ_API_KEY` is set, otherwise it will use `OPENAI_API_KEY` if configured. All LLM calls are performed server-side; the API key is never exposed to the browser.
+
+
 ## Usage
 
 1. **Set Current Location**: Enter your current location (e.g., "Seahaven", "Two Weeks at Sea")

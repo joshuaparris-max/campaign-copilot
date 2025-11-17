@@ -56,7 +56,7 @@ interface CampaignContextType {
   addSessionEvent: (event: Omit<SessionEvent, 'id' | 'createdAt' | 'campaignId'>) => SessionEvent;
   updateSessionEvent: (id: string, updates: Partial<SessionEvent>) => void;
   deleteSessionEvent: (id: string) => void;
-  importData: (data: CampaignData) => void;
+  importData: (data: CampaignData, mode?: 'merge' | 'overwrite') => void;
 }
 
 const CampaignContext = createContext<CampaignContextType | undefined>(undefined);
@@ -434,28 +434,57 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
   };
 
   // Import full campaign data into context (applies and persists)
-  const importData = (data: CampaignData) => {
+  const importData = (data: CampaignData, mode: 'merge' | 'overwrite' = 'overwrite') => {
     try {
       const campaign = data.campaign;
       const cid = campaign.id;
+      const importedQuests = (data.quests || []).map(q => ({ ...q, campaignId: cid }));
+      const importedNPCs = (data.npcs || []).map(n => ({ ...n, campaignId: cid }));
+      const importedBusiness = (data.businessIdeas || []).map(b => ({ ...b, campaignId: cid }));
+      const importedHubs = (data.hubs || []).map(h => ({ ...h, campaignId: cid }));
+      const importedLeads = (data.leads || []).map(l => ({ ...l, campaignId: cid }));
+      const importedEvents = (data.sessionEvents || []).map(e => ({ ...e, campaignId: cid }));
+      const importedCharacter = data.characterProfile ? { ...data.characterProfile, campaignId: cid } : null;
 
-      setCampaigns([campaign]);
-      setActiveCampaignIdState(cid);
-
-      setAllQuests((data.quests || []).map(q => ({ ...q, campaignId: cid })));
-      setAllNPCs((data.npcs || []).map(n => ({ ...n, campaignId: cid })));
-      setAllBusinessIdeas((data.businessIdeas || []).map(b => ({ ...b, campaignId: cid })));
-      setAllHubs((data.hubs || []).map(h => ({ ...h, campaignId: cid })));
-      setAllLeads((data.leads || []).map(l => ({ ...l, campaignId: cid })));
-      setAllSessionEvents((data.sessionEvents || []).map(e => ({ ...e, campaignId: cid })));
-
-      if (data.characterProfile) {
-        setCharacterProfileState({ ...data.characterProfile, campaignId: cid });
+      if (mode === 'overwrite') {
+        // Replace everything with imported campaign
+        setCampaigns([campaign]);
+        setAllQuests(importedQuests);
+        setAllNPCs(importedNPCs);
+        setAllBusinessIdeas(importedBusiness);
+        setAllHubs(importedHubs);
+        setAllLeads(importedLeads);
+        setAllSessionEvents(importedEvents);
+        setCharacterProfileState(importedCharacter);
+        setActiveHubIdState(importedHubs && importedHubs.length > 0 ? importedHubs[0].id : null);
+        setActiveCampaignIdState(cid);
       } else {
-        setCharacterProfileState(null);
-      }
+        // Merge: append imported items to existing collections (IDs should be resolved beforehand)
+        setCampaigns(prev => {
+          const exists = prev.some(c => c.id === campaign.id);
+          return exists ? prev : [...prev, campaign];
+        });
 
-      setActiveHubIdState(data.hubs && data.hubs.length > 0 ? data.hubs[0].id : null);
+        setAllQuests(prev => [...prev, ...importedQuests]);
+        setAllNPCs(prev => [...prev, ...importedNPCs]);
+        setAllBusinessIdeas(prev => [...prev, ...importedBusiness]);
+        setAllHubs(prev => [...prev, ...importedHubs]);
+        setAllLeads(prev => [...prev, ...importedLeads]);
+        setAllSessionEvents(prev => [...prev, ...importedEvents]);
+        if (importedCharacter) {
+          // prefer existing character if IDs differ; add or replace based on id
+          setCharacterProfileState(prev => {
+            if (!prev) return importedCharacter;
+            if (prev.id === importedCharacter.id) return importedCharacter;
+            // keep existing profile but do not overwrite by default
+            return prev;
+          });
+        }
+
+        // Activate imported campaign
+        setActiveCampaignIdState(cid);
+        setActiveHubIdState(importedHubs && importedHubs.length > 0 ? importedHubs[0].id : activeHubId);
+      }
 
       // Persist migration flag so migration routine won't overwrite imported data
       try {
