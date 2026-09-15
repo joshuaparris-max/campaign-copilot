@@ -6,6 +6,7 @@ import { CharacterPanel } from './components/CharacterPanel';
 import { SessionTimeline } from './components/SessionTimeline';
 import { HandoffSummary } from './components/HandoffSummary';
 import { CampaignSwitcher } from './components/CampaignSwitcher';
+import { RulesReferencePanel } from './components/RulesReferencePanel';
 import { CampaignProvider } from './contexts/CampaignContext';
 import { ToastProvider } from './contexts/ToastContext';
 
@@ -58,6 +59,8 @@ function App() {
                 <SessionTimeline />
                 <HandoffSummary />
               </div>
+
+              <RulesReferencePanel />
             </main>
           </div>
         </div>
